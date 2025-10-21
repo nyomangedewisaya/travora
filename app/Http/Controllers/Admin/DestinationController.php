@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Controller;
 use App\Models\Destination;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -13,7 +14,6 @@ class DestinationController extends Controller
     public function index(Request $request)
     {
         $parentDestinations = Destination::whereNull('parent_id')->withCount('children')->latest()->get();
-
         $childDestinationsQuery = Destination::whereNotNull('parent_id')->with('parent')->latest();
 
         if ($request->filled('search')) {

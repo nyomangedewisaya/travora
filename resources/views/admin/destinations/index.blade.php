@@ -17,26 +17,46 @@
     
         openCreateModal() {
             this.isEditMode = false;
-            this.modalTitle = 'Tambah Destinasi Baru';
-            this.formAction = '{{ route('admin.managements.destinations.store') }}';
-            this.formData = { name: '', parent_id: '', description: '', address: '' };
+            this.modalTitle = 'Tambah Paket Wisata Baru';
+            this.formAction = '{{ route('admin.managements.packages.store') }}';
+            // Set SEMUA field ke nilai awal
+            this.formData = {
+                name: '',
+                partner_id: '',
+                destination_id: '',
+                category_id: '',
+                duration_days: '',
+                price: '',
+                description: '',
+                status: 'pending'
+            };
             this.imagePreviewUrl = null;
+            this.errors = {}; // Reset error
             this.modalOpen = true;
+            this.$nextTick(() => {
+                this.initModalSelects();
+                // Reset TomSelect values explicitly
+                Object.values(this.modalSelectInstances).forEach(select => select && select.clear());
+            });
         },
-        openEditModal(destination) {
+    
+        openEditModal(packageData) {
             this.isEditMode = true;
-            this.modalTitle = 'Edit Destinasi: ' + destination.name;
-            this.formAction = `/admin/managements/destinations/${destination.slug}`;
-            this.formData = { ...destination };
-    
-            if (destination.hero_image_url) {
-                this.imagePreviewUrl = `{{ asset('storage') }}/${destination.hero_image_url}`;
-            } else {
-                this.imagePreviewUrl = null;
-            }
-    
+            this.modalTitle = 'Edit Paket: ' + packageData.name;
+            this.formAction = `/admin/managements/packages/${packageData.slug}`;
+            this.formData = { ...packageData };
+            this.imagePreviewUrl = packageData.media && packageData.media.length > 0 ? `{{ asset('storage') }}/${packageData.media[0].file_path}` : null;
+            this.errors = {};
             this.modalOpen = true;
+            this.$nextTick(() => {
+                this.initModalSelects();
+                // Set nilai awal TomSelect saat edit
+                if (this.formData.partner_id && this.modalSelectInstances.partner) this.modalSelectInstances.partner.setValue(this.formData.partner_id, true); // true = silent update
+                if (this.formData.destination_id && this.modalSelectInstances.destination) this.modalSelectInstances.destination.setValue(this.formData.destination_id, true);
+                if (this.formData.category_id && this.modalSelectInstances.category) this.modalSelectInstances.category.setValue(this.formData.category_id, true);
+            });
         },
+    
         openDeleteModal(destination) {
             this.destinationToDelete = destination;
             this.deleteModalOpen = true;
@@ -82,14 +102,35 @@
         validate() {
             this.errors = {};
             let isValid = true;
-            if (!this.formData.name) {
-                this.errors.name = 'Nama destinasi wajib diisi.';
+            const requiredFields = {
+                name: 'Nama paket wajib diisi.',
+                partner_id: 'Partner wajib dipilih.',
+                destination_id: 'Tujuan destinasi wajib dipilih.',
+                category_id: 'Kategori wajib dipilih.',
+                duration_days: 'Durasi wajib diisi.',
+                price: 'Harga wajib diisi.',
+                description: 'Deskripsi wajib diisi.',
+                status: 'Status wajib dipilih.'
+            };
+    
+            for (const field in requiredFields) {
+                // Periksa jika field kosong, null, atau undefined
+                if (this.formData[field] === null || this.formData[field] === undefined || String(this.formData[field]).trim() === '') {
+                    this.errors[field] = requiredFields[field];
+                    isValid = false;
+                }
+            }
+    
+            // Validasi numerik tambahan
+            if (this.formData.duration_days && (isNaN(this.formData.duration_days) || Number(this.formData.duration_days) < 1)) {
+                this.errors.duration_days = 'Durasi harus angka minimal 1.';
                 isValid = false;
             }
-            if (!this.formData.description) {
-                this.errors.description = 'Deskripsi wajib diisi.';
+            if (this.formData.price && (isNaN(this.formData.price) || Number(this.formData.price) < 0)) {
+                this.errors.price = 'Harga harus angka positif.';
                 isValid = false;
             }
+    
             return isValid;
         },
     
@@ -113,7 +154,7 @@
             </div>
 
             <button @click="openCreateModal()"
-                class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-3 bg-indigo-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-indigo-700">
+                class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 bg-indigo-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-indigo-700">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>
@@ -197,7 +238,7 @@
                         <div class="relative">
                             <input type="text" name="search" placeholder="Cari nama tempat wisata..."
                                 value="{{ request('search') }}"
-                                class="block w-full pl-4 pr-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                                class="block w-full pl-4 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-600">
                         </div>
                         <select name="filter_parent"
                             class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
@@ -222,10 +263,10 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase w-16">No</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gambar</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Induk</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Koordinat</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gambar</th>
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Aksi</th>
                         </tr>
                     </thead>
@@ -237,6 +278,10 @@
                                         class="flex items-center justify-center w-6 h-6 bg-indigo-600 text-white rounded-full text-xs font-bold">
                                         {{ $loop->iteration }}</div>
                                 </td>
+                                <td class="px-6 py-4"><img
+                                        src="{{ $destination->hero_image_url ? asset('storage/' . $destination->hero_image_url) : 'https://placehold.co/400x200' }}"
+                                        class="w-32 h-20 object-cover rounded-lg border shadow-sm"
+                                        alt="{{ $destination->name }}"></td>
                                 <td class="px-6 py-4">
                                     <div class="text-sm font-medium text-gray-900">{{ $destination->name }}</div>
                                 </td>
@@ -251,10 +296,6 @@
                                         -
                                     @endif
                                 </td>
-                                <td class="px-6 py-4"><img
-                                        src="{{ $destination->hero_image_url ? asset('storage/' . $destination->hero_image_url) : 'https://placehold.co/400x200' }}"
-                                        class="w-32 h-20 object-cover rounded-lg border shadow-sm"
-                                        alt="{{ $destination->name }}"></td>
                                 <td class="px-6 py-4 text-center">
                                     <div class="flex justify-center items-center space-x-2">
                                         <button @click="openEditModal({{ json_encode($destination) }})"

@@ -1,9 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\AccomodationController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\DestinationController;
+use App\Http\Controllers\Admin\DestinationController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -27,5 +28,7 @@ Route::middleware(['auth', 'role:admin'])
                 Route::resource('destinations', DestinationController::class);
                 Route::resource('packages', PackageController::class);
                 Route::patch('packages/{package:slug}/status', [PackageController::class, 'updateStatus'])->name('packages.updateStatus');
+                Route::resource('accommodations', AccomodationController::class);
+                Route::patch('accommodations/{accommodation:slug}/status', [AccomodationController::class, 'updateStatus'])->name('accommodations.updateStatus');
             });
     });

@@ -8,12 +8,14 @@ use App\Models\Destination;
 use App\Models\Package;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class PackageController extends Controller
 {
     public function index(Request $request)
     {
-        $packagesQuery = Package::with(['partner', 'destination'])->latest();
+        $packagesQuery = Package::with(['partner', 'destination', 'media'])->latest();
 
         if ($request->filled('search')) {
             $packagesQuery->where('name', 'like', '%' . $request->search . '%');
@@ -36,6 +38,101 @@ class PackageController extends Controller
             'categories' => $categories,
             'partners' => $partners,
         ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:packages',
+            'partner_id' => 'required|exists:users,id',
+            'destination_id' => 'required|exists:destinations,id',
+            'category_id' => 'required|exists:categories,id',
+            'duration_days' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0',
+            'description' => 'required|string',
+            'status' => 'required|in:pending,publish,draft,rejected',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048', // Nama input gambar
+        ]);
+
+        // Buat paket (tanpa gambar)
+        $package = Package::create([
+            'name' => $validated['name'],
+            'slug' => Str::slug($validated['name']),
+            'partner_id' => $validated['partner_id'],
+            'destination_id' => $validated['destination_id'],
+            'category_id' => $validated['category_id'],
+            'duration_days' => $validated['duration_days'],
+            'price' => $validated['price'],
+            'description' => $validated['description'],
+            'status' => $validated['status'],
+        ]);
+
+        // Simpan gambar ke tabel media jika ada
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('packages', 'public');
+            $package->media()->create([ // Gunakan relasi media()
+                'file_path' => $path,
+                'type' => 'image',
+            ]);
+        }
+
+        return redirect()->route('admin.managements.packages.index')->with('success', 'Paket wisata berhasil ditambahkan!');
+    }
+
+    public function update(Request $request, Package $package)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:packages,name,' . $package->id,
+            'partner_id' => 'required|exists:users,id',
+            'destination_id' => 'required|exists:destinations,id',
+            'category_id' => 'required|exists:categories,id',
+            'duration_days' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0',
+            'description' => 'required|string',
+            'status' => 'required|in:pending,publish,draft,rejected',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
+
+        $package->update([
+            'name' => $validated['name'],
+            'slug' => Str::slug($validated['name']),
+            'partner_id' => $validated['partner_id'],
+            'destination_id' => $validated['destination_id'],
+            'category_id' => $validated['category_id'],
+            'duration_days' => $validated['duration_days'],
+            'price' => $validated['price'],
+            'description' => $validated['description'],
+            'status' => $validated['status'],
+        ]);
+
+        if ($request->hasFile('image')) {
+            $existingMedia = $package->media()->first();
+            if ($existingMedia) {
+                Storage::disk('public')->delete($existingMedia->file_path);
+                $existingMedia->delete();
+            }
+
+            $path = $request->file('image')->store('packages', 'public');
+            $package->media()->create([
+                'file_path' => $path,
+                'type' => 'image',
+            ]);
+        }
+
+        return redirect()->route('admin.managements.packages.index')->with('success', 'Paket wisata berhasil diperbarui!');
+    }
+
+    public function destroy(Package $package)
+    {
+        $existingMedia = $package->media()->first();
+        if ($existingMedia) {
+            Storage::disk('public')->delete($existingMedia->file_path);
+            $existingMedia->delete();
+        }
+
+        $package->delete(); // Hapus paketnya
+
+        return redirect()->route('admin.managements.packages.index')->with('success', 'Paket wisata berhasil dihapus!');
     }
 
     public function updateStatus(Request $request, Package $package)

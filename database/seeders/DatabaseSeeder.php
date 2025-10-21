@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             DestinationSeeder::class,
             CategorySeeder::class,
             PackageSeeder::class,
+            AccommodationSeeder::class
 
             // php artisan db:seed --class=NamaSeeder
         ]);

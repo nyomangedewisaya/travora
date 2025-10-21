@@ -54,7 +54,7 @@
         </a>
 
         {{-- AKOMODASI --}}
-        <a href="#"
+        <a href="{{ route('admin.managements.accommodations.index') }}"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.managements.accommodations.*') 
                 ? 'bg-indigo-700 border-indigo-300 text-white' 

@@ -17,8 +17,4 @@ class Category extends Model
     public function packages() {
         return $this->hasMany(Package::class);
     }
-
-    public function accommodations() {
-        return $this->hasMany(Accommodation::class);
-    }
 }

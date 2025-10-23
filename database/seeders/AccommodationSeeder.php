@@ -19,10 +19,9 @@ class AccommodationSeeder extends Seeder
         $destinationIds = Destination::whereNotNull('parent_id')->pluck('id'); 
         // Ambil ID kategori yang relevan (misal, yang baru ditambahkan)
         // Untuk simpelnya, ambil semua ID dulu
-        $categoryIds = Category::pluck('id'); 
 
         // 2. Pastikan ada data untuk dihubungkan
-        if ($partnerIds->isEmpty() || $destinationIds->isEmpty() || $categoryIds->isEmpty()) {
+        if ($partnerIds->isEmpty() || $destinationIds->isEmpty()) {
             $this->command->warn('Tidak dapat membuat seeder Akomodasi: Pastikan ada user Partner, destinasi anak, dan kategori yang tersedia.');
             return;
         }
@@ -56,7 +55,6 @@ class AccommodationSeeder extends Seeder
             Accommodation::create([
                 'partner_id' => $partnerIds->random(),
                 'destination_id' => $destinationIds->random(),
-                'category_id' => $categoryIds->random(), // <-- Isi category_id
                 'name' => $data['name'],
                 'slug' => Str::slug($data['name']) . '-' . Str::random(3), 
                 'type' => $data['type'] ?? $types[array_rand($types)], 

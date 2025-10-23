@@ -1,9 +1,7 @@
 @extends('layouts.admin', ['title' => 'Manajemen Akomodasi'])
-
 @push('styles')
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
 @endpush
-
 @section('content')
     <div x-data="{
         modalOpen: false,
@@ -21,20 +19,26 @@
         accommodationToUpdateStatus: {},
         statusFormAction: '',
         newStatus: '',
+        verifyModalOpen: false,
+        accommodationToVerify: {},
+        verifyFormAction: '',
+        isCurrentlyVerified: false,
+        viewModalOpen: false,
+        accommodationToView: {},
     
         initModalSelects() {
             Object.values(this.modalSelectInstances).forEach(select => select && select.destroy());
             const config = { create: false, sortField: { field: 'text', direction: 'asc' } };
-            
-            try { 
+    
+            try {
                 const elPartner = document.getElementById('partner_id');
-                if (elPartner) this.modalSelectInstances.partner = new TomSelect(elPartner, { ...config, placeholder: 'Cari & pilih partner...' }); 
+                if (elPartner) this.modalSelectInstances.partner = new TomSelect(elPartner, { ...config, placeholder: 'Cari & pilih partner...' });
                 else console.warn('Element #partner_id not found for TomSelect');
             } catch (e) { console.error('Error init partner select:', e); }
-            
-            try { 
+    
+            try {
                 const elDest = document.getElementById('destination_id');
-                if (elDest) this.modalSelectInstances.destination = new TomSelect(elDest, { ...config, placeholder: 'Cari tempat wisata...' }); 
+                if (elDest) this.modalSelectInstances.destination = new TomSelect(elDest, { ...config, placeholder: 'Cari tempat wisata...' });
                 else console.warn('Element #destination_id not found for TomSelect');
             } catch (e) { console.error('Error init destination select:', e); }
         },
@@ -43,23 +47,36 @@
             Object.values(this.filterSelectInstances).forEach(select => select && select.destroy());
             try { this.filterSelectInstances.destination = new TomSelect('#filter_destination_select', { create: false, placeholder: 'Cari destinasi...' }); } catch (e) {}
             try { this.filterSelectInstances.type = new TomSelect('#filter_type_select', { create: false, placeholder: 'Pilih tipe...' }); } catch (e) {}
+            try { this.filterSelectInstances.status = new TomSelect('#filter_status_select', { create: false, placeholder: 'Pilih status...' }); } catch (e) {}
             this.filterSelectsInitialized = true;
         },
     
+        openVerifyModal(accommodationData) {
+            this.accommodationToVerify = accommodationData;
+            this.verifyFormAction = `{{ url('admin/managements/accommodations') }}/${accommodationData.slug}/verify`;
+            this.isCurrentlyVerified = Boolean(accommodationData.is_verified);
+            this.verifyModalOpen = true;
+        },
+    
         openCreateModal() {
-            this.isEditMode = false; this.modalTitle = 'Tambah Akomodasi Baru';
-            this.formAction = '{{ route("admin.managements.accommodations.store") }}';
-            this.formData = { name: '', partner_id: '', destination_id: '', type: '', address: '', description: '', status: 'pending', is_verified: false }; 
-            this.imagePreviewUrl = null; this.errors = { name: null, partner_id: null }; this.modalOpen = true;
+            this.isEditMode = false;
+            this.modalTitle = 'Tambah Akomodasi Baru';
+            this.formAction = '{{ route('admin.managements.accommodations.store') }}';
+            this.formData = { name: '', partner_id: '', destination_id: '', type: '', address: '', description: '', status: 'pending', is_verified: false };
+            this.imagePreviewUrl = null;
+            this.errors = { name: null, partner_id: null };
+            this.modalOpen = true;
             this.$nextTick(() => this.initModalSelects());
         },
         openEditModal(accommodationData) {
-            this.isEditMode = true; this.modalTitle = 'Edit Akomodasi: ' + accommodationData.name;
+            this.isEditMode = true;
+            this.modalTitle = 'Edit Akomodasi: ' + accommodationData.name;
             this.formAction = `/admin/managements/accommodations/${accommodationData.slug}`;
-            this.formData = { ...accommodationData, is_verified: Boolean(accommodationData.is_verified) }; 
+            this.formData = { ...accommodationData, is_verified: Boolean(accommodationData.is_verified) };
             this.imagePreviewUrl = accommodationData.media && accommodationData.media.length > 0 ? `{{ asset('storage') }}/${accommodationData.media[0].file_path}` : null;
-            this.errors = { name: null, partner_id: null }; this.modalOpen = true;
-            this.$nextTick(() => { 
+            this.errors = { name: null, partner_id: null };
+            this.modalOpen = true;
+            this.$nextTick(() => {
                 this.initModalSelects();
                 if (this.formData.partner_id && this.modalSelectInstances.partner) this.modalSelectInstances.partner.setValue(this.formData.partner_id, true);
                 if (this.formData.destination_id && this.modalSelectInstances.destination) this.modalSelectInstances.destination.setValue(this.formData.destination_id, true);
@@ -74,6 +91,12 @@
             this.statusFormAction = `{{ url('admin/managements/accommodations') }}/${accommodationData.slug}/status`;
             this.newStatus = accommodationData.status;
             this.statusModalOpen = true;
+        },
+        openViewModal(accommodationData) {
+            this.accommodationToView = accommodationData;
+            if (accommodationData.created_at) { this.accommodationToView.created_at_formatted = new Date(accommodationData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+            if (accommodationData.updated_at) { this.accommodationToView.updated_at_formatted = new Date(accommodationData.updated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+            this.viewModalOpen = true;
         },
         previewImage(event) {
             const file = event.target.files[0];
@@ -95,67 +118,79 @@
             }
             return isValid;
         },
-        handleSubmit() { 
+        handleSubmit() {
             this.formData.partner_id = this.modalSelectInstances.partner ? this.modalSelectInstances.partner.getValue() : '';
             this.formData.destination_id = this.modalSelectInstances.destination ? this.modalSelectInstances.destination.getValue() : '';
-            
-            if (this.validate()) { 
-                this.formData.is_verified = this.$refs.is_verified_checkbox ? this.$refs.is_verified_checkbox.checked : false; // Tambahkan pengecekan ref
-                this.$nextTick(() => { this.$refs.form.submit(); }); 
-            } 
+    
+            if (this.validate()) {
+                this.$nextTick(() => { this.$refs.form.submit(); });
+            }
         }
     }" class="mt-8">
-        {{-- Header & Tombol Tambah --}}
-        <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-semibold text-gray-700">Filter & Kelola Akomodasi</h3>
-            <button @click="openCreateModal()"
-                class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 bg-indigo-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-indigo-700">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                </svg>
-                Tambah Akomodasi
-            </button>
-        </div>
-        {{-- FORM FILTER (Sesuaikan filter) --}}
         <div class="bg-white p-4 rounded-2xl shadow-lg mb-6" x-init="initFilterSelects()">
             <form action="{{ route('admin.managements.accommodations.index') }}" method="GET">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <input type="text" name="search" placeholder="Cari nama akomodasi..."
-                        value="{{ request('search') }}"
-                        class="block w-full pl-4 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                    <div>
-                        <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
-                        <select name="filter_destination" id="filter_destination_select" x-show="filterSelectsInitialized"
-                            x-cloak>
-                            <option value="">Semua Destinasi</option>
-                            @foreach ($destinations as $destination)
-                                <option value="{{ $destination->id }}"
-                                    {{ request('filter_destination') == $destination->id ? 'selected' : '' }}>
-                                    {{ $destination->name }}</option>
-                            @endforeach
-                        </select>
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                    <div class="relative flex-grow w-full md:w-auto">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <input type="text" name="search" placeholder="Cari nama akomodasi..."
+                            value="{{ $requestInput['search'] ?? '' }}"
+                            class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-600">
                     </div>
-                    <div>
-                        <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
-                        <select name="filter_type" id="filter_type_select" x-show="filterSelectsInitialized" x-cloak>
-                            <option value="">Semua Tipe</option>
-                            @foreach ($types as $type)
-                                <option value="{{ $type }}" {{ request('filter_type') == $type ? 'selected' : '' }}>
-                                    {{ ucfirst($type) }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 w-full md:w-auto flex-shrink-0">
                         <button type="submit"
-                            class="w-full inline-flex justify-center py-2 px-4 border rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Filter</button>
+                            class="w-1/2 md:w-auto inline-flex justify-center py-2 px-5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Filter</button>
                         <a href="{{ route('admin.managements.accommodations.index') }}"
-                            class="w-full inline-flex justify-center py-2 px-4 border rounded-md text-gray-700 bg-white hover:bg-gray-50">Reset</a>
+                            class="w-1/2 md:w-auto inline-flex justify-center py-2 px-5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Reset</a>
                     </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
+                    <select name="filter_destination" id="filter_destination_select" x-show="filterSelectsInitialized"
+                        x-cloak class="shadow-md">
+                        <option value="">Semua Destinasi</option>
+                        @foreach ($destinations as $destination)
+                            <option value="{{ $destination->slug }}"
+                                {{ ($requestInput['filter_destination'] ?? '') == $destination->slug ? 'selected' : '' }}>
+                                {{ $destination->name }}</option>
+                        @endforeach
+                    </select>
+                    <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
+                    <select name="filter_type" id="filter_type_select" x-show="filterSelectsInitialized" x-cloak
+                        class="shadow-md">
+                        <option value="">Semua Tipe</option>
+                        @foreach ($types as $type)
+                            <option value="{{ $type }}"
+                                {{ ($requestInput['filter_type'] ?? '') == $type ? 'selected' : '' }}>{{ ucfirst($type) }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <select name="sort_by"
+                        class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-sm shadow-md focus:outline-none text-xs text-gray-600 appearance-none">
+                        <option value="default"
+                            {{ ($requestInput['sort_by'] ?? 'default') == 'default' ? 'selected' : '' }}>Urutkan (Default)
+                        </option>
+                        <option value="name" {{ ($requestInput['sort_by'] ?? '') == 'name' ? 'selected' : '' }}>Nama
+                        </option>
+                        <option value="status" {{ ($requestInput['sort_by'] ?? '') == 'status' ? 'selected' : '' }}>Status
+                        </option>
+                    </select>
+                    <select name="direction"
+                        class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-sm shadow-md focus:outline-none text-xs text-gray-600 appearance-none">
+                        <option value="desc" {{ ($requestInput['direction'] ?? 'desc') == 'desc' ? 'selected' : '' }}>
+                            Menurun</option>
+                        <option value="asc" {{ ($requestInput['direction'] ?? '') == 'asc' ? 'selected' : '' }}>Menaik
+                        </option>
+                    </select>
                 </div>
             </form>
         </div>
 
-        {{-- TABEL AKOMODASI (Sesuaikan kolom) --}}
         <div class="bg-white rounded-2xl shadow-lg overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -164,7 +199,6 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Akomodasi</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Destinasi</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipe</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Verifikasi</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Aksi</th>
@@ -189,7 +223,7 @@
                                         <div>
                                             <span
                                                 class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                                                {{ $accommodation->category->name }}
+                                                {{ ucfirst($accommodation->type) }}
                                             </span>
                                         </div>
                                         <div class="text-sm font-medium text-gray-900">{{ $accommodation->name }}</div>
@@ -201,9 +235,6 @@
                             </td>
                             <td class="px-6 py-4">
                                 <div class="text-sm text-gray-500">{{ $accommodation->destination->name ?? 'N/A' }}</div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="text-sm text-gray-500">{{ ucfirst($accommodation->type) }}</div>
                             </td>
                             <td class="px-6 py-4 text-center">
                                 <button @click="openStatusModal({{ json_encode($accommodation) }})" type="button"
@@ -224,24 +255,30 @@
                                 </button>
                             </td>
                             <td class="px-6 py-4 text-center">
-                                @if ($accommodation->is_verified)
-                                    <span
-                                        class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-300">Verified</span>
-                                @else
-                                    <span
-                                        class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800 cursor-pointer hover:bg-gray-300">Not
-                                        Verified</span>
-                                @endif
+                                <button @click="openVerifyModal({{ json_encode($accommodation) }})" type="button"
+                                    class="focus:outline-none">
+                                    @if ($accommodation->is_verified)
+                                        <span
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">Verified</span>
+                                    @else
+                                        <span
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800 cursor-pointer hover:bg-gray-200">Not
+                                            Verified</span>
+                                    @endif
+                                </button>
                             </td>
                             <td class="px-6 py-4 text-center">
                                 <div class="flex justify-center items-center space-x-2">
-                                    <button @click="openEditModal({{ json_encode($accommodation) }})"
-                                        class="text-indigo-600 hover:text-indigo-900 p-1" title="Edit"><svg
-                                            class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <button @click="openViewModal({{ json_encode($accommodation) }})"
+                                        class="text-blue-600 hover:text-blue-900 p-1" title="Lihat Detail">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z">
                                             </path>
-                                        </svg></button>
+                                        </svg>
+                                    </button>
                                     <button @click="openDeleteModal({{ json_encode($accommodation) }})"
                                         class="text-red-600 hover:text-red-900 p-1" title="Hapus"><svg class="w-5 h-5"
                                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -260,8 +297,37 @@
                     @endforelse
                 </tbody>
             </table>
+            @if ($accommodations->isNotEmpty())
+                <div
+                    class="px-4 py-6 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <form action="{{ route('admin.managements.accommodations.index') }}" method="GET"
+                        class="flex items-center space-x-2">
+                        @foreach (request()->except(['perPage', 'page']) as $key => $value)
+                            @if (is_array($value))
+                                @foreach ($value as $item)
+                                    <input type="hidden" name="{{ $key }}[]" value="{{ $item }}">
+                                @endforeach
+                            @else
+                                <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                            @endif
+                        @endforeach
+
+                        <label for="perPage" class="text-sm font-medium text-gray-700 whitespace-nowrap">Tampil:</label>
+                        <select name="perPage" id="perPage" @change="$el.closest('form').submit()"
+                            class="appearance-none block w-20 py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                            <option value="10" {{ $perPage == 10 ? 'selected' : '' }}>10</option>
+                            <option value="25" {{ $perPage == 25 ? 'selected' : '' }}>25</option>
+                            <option value="50" {{ $perPage == 50 ? 'selected' : '' }}>50</option>
+                            <option value="100" {{ $perPage == 100 ? 'selected' : '' }}>100</option>
+                        </select>
+                        <span class="text-sm text-gray-500">data</span>
+                    </form>
+                    <div>
+                        {{ $accommodations->appends(request()->query())->links() }}
+                    </div>
+                </div>
+            @endif
         </div>
-        <div class="mt-6 mb-4">{{ $accommodations->appends(request()->query())->links() }}</div>
 
         <div x-show="modalOpen" x-cloak x-transition.opacity.duration.300ms
             class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -276,7 +342,6 @@
                     <template x-if="isEditMode"><input type="hidden" name="_method" value="PUT"></template>
 
                     <div class="p-6 space-y-6 overflow-y-auto">
-                        {{-- Nama Paket --}}
                         <div>
                             <label for="name" class="block text-sm font-medium text-gray-700">Nama Akomodasi</label>
                             <input type="text" name="name" id="name" x-model="formData.name"
@@ -288,12 +353,11 @@
                             </p>
                         </div>
 
-                        {{-- Dropdown Partner --}}
                         <div>
                             <label for="partner_id" class="block text-sm font-medium text-gray-700">Milik Partner</label>
                             <select name="partner_id" id="partner_id" @input="errors.partner_id = null"
                                 :class="{ 'border-red-500': errors.partner_id }">
-                                <option value="">Pilih Partner</option> {{-- <-- TAMBAHKAN INI --}}
+                                <option value="">Pilih Partner</option>
                                 @foreach ($partners as $partner)
                                     <option value="{{ $partner->id }}">{{ $partner->name }}</option>
                                 @endforeach
@@ -302,15 +366,13 @@
                                 class="mt-1 text-sm text-red-600"></p>
                         </div>
 
-                        {{-- Dropdown Destinasi & Kategori --}}
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label for="destination_id" class="block text-sm font-medium text-gray-700">Tujuan
                                     Destinasi</label>
-                                <select name="destination_id" id="destination_id"
-                                    @input="errors.destination_id = null"
+                                <select name="destination_id" id="destination_id" @input="errors.destination_id = null"
                                     :class="{ 'border-red-500': errors.destination_id }">
-                                    <option value="">Pilih Tempat Wisata</option> {{-- <-- TAMBAHKAN INI --}}
+                                    <option value="">Pilih Tempat Wisata</option>
                                     @foreach ($destinations as $destination)
                                         <option value="{{ $destination->id }}">{{ $destination->name }}</option>
                                     @endforeach
@@ -329,7 +391,6 @@
                             </div>
                         </div>
 
-                        {{-- Deskripsi --}}
                         <div>
                             <label for="address" class="block text-sm font-medium text-gray-700">Alamat Lengkap</label>
                             <textarea name="address" id="address" rows="4" x-model="formData.address"
@@ -360,8 +421,8 @@
                             <div class="pt-6">
                                 <label class="flex items-center space-x-2 cursor-pointer select-none">
                                     <input type="checkbox" name="is_verified" value="1"
-                                        x-model="formData.is_verified" x-ref="is_verified_checkbox"
-                                        class="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 cursor-pointer">
+                                        :checked="formData.is_verified" x-ref="is_verified_checkbox"
+                                        class="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 cursor-pointer rounded focus:ring-indigo-500">
                                     <span class="text-sm font-medium text-gray-700">Terverifikasi oleh <span
                                             class="text-indigo-600 font-semibold">Travora</span></span>
                                 </label>
@@ -458,7 +519,8 @@
 
                     <div class="p-6">
                         <h3 class="text-lg font-semibold text-gray-800">Ubah Status Akomodasi</h3>
-                        <p class="text-sm text-gray-600 mt-1">Akomodasi: <strong x-text="accommodationToUpdateStatus.name"></strong>
+                        <p class="text-sm text-gray-600 mt-1">Akomodasi: <strong
+                                x-text="accommodationToUpdateStatus.name"></strong>
                         </p>
 
                         <div class="mt-4 space-y-2">
@@ -515,6 +577,169 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div x-show="verifyModalOpen" x-cloak x-transition.opacity.duration.300ms
+            class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div @click.away="verifyModalOpen = false" class="bg-white rounded-2xl shadow-lg w-full max-w-md">
+                <div class="p-5 flex items-center bg-indigo-600 rounded-t-2xl"
+                    :class="isCurrentlyVerified ? 'bg-red-600' : 'bg-indigo-600'">
+                    <div class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-white/20 rounded-full">
+                        <template x-if="isCurrentlyVerified">
+                            <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                            </svg>
+                        </template>
+                        <template x-if="!isCurrentlyVerified">
+                            <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </template>
+                    </div>
+                    <h3 class="ml-4 text-xl font-semibold text-white"
+                        x-text="isCurrentlyVerified ? 'Batalkan Verifikasi?' : 'Verifikasi Akomodasi?'">
+                    </h3>
+                </div>
+
+                <div class="p-6">
+                    <template x-if="isCurrentlyVerified">
+                        <p class="text-gray-600">
+                            Anda yakin ingin <strong class="font-medium text-red-600">membatalkan verifikasi</strong> untuk
+                            akomodasi <strong class="font-medium text-gray-800"
+                                x-text="accommodationToVerify.name"></strong>?
+                        </p>
+                    </template>
+                    <template x-if="!isCurrentlyVerified">
+                        <p class="text-gray-600">
+                            Anda yakin ingin <strong class="font-medium text-indigo-600">memverifikasi</strong> akomodasi
+                            <strong class="font-medium text-gray-800" x-text="accommodationToVerify.name"></strong>?
+                        </p>
+                    </template>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex justify-end gap-x-4 rounded-b-2xl">
+                    <button @click="verifyModalOpen = false" type="button"
+                        class="px-4 py-2 border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase bg-white hover:bg-gray-50">
+                        Batal
+                    </button>
+                    <form :action="verifyFormAction" method="POST">
+                        @csrf
+                        @method('PATCH')
+                        <button type="submit"
+                            :class="isCurrentlyVerified ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'"
+                            class="px-4 py-2 border border-transparent rounded-md font-semibold text-xs text-white uppercase transition-colors">
+                            <span x-text="isCurrentlyVerified ? 'Ya, Batalkan' : 'Ya, Verifikasi'"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="viewModalOpen" x-cloak x-transition.opacity.duration.300ms
+            class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div @click.away="viewModalOpen = false"
+                class="bg-white rounded-2xl shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div class="p-5 flex items-center justify-between bg-blue-600 rounded-t-2xl flex-shrink-0">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-white/20 rounded-full">
+                            <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </div>
+                        <h3 class="ml-4 text-xl font-semibold text-white">Detail Akomodasi</h3>
+                    </div>
+                </div>
+
+                <div class="p-6 space-y-4 overflow-y-auto flex-grow">
+                    <img :src="accommodationToView.media && accommodationToView.media.length > 0 ?
+                        `{{ asset('storage') }}/${accommodationToView.media[0].file_path}` :
+                        'https://placehold.co/600x300'"
+                        :alt="accommodationToView.name" class="w-full h-48 object-cover rounded-lg border shadow-sm mb-4">
+
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                        <div>
+                            <dt class="font-medium text-gray-500">Nama Akomodasi</dt>
+                            <dd class="mt-1 font-semibold text-lg text-gray-900" x-text="accommodationToView.name || '-'">
+                            </dd>
+                            <dt class="mt-3 font-medium text-gray-500">Partner Pemilik</dt>
+                            <dd class="mt-1 text-gray-900"
+                                x-text="accommodationToView.partner ? accommodationToView.partner.name : '-'"></dd>
+                            <dt class="mt-3 font-medium text-gray-500">Tipe</dt>
+                            <dd class="mt-1 text-gray-900"
+                                x-text="accommodationToView.type ? accommodationToView.type.charAt(0).toUpperCase() + accommodationToView.type.slice(1) : '-'">
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="font-medium text-gray-500">Destinasi</dt>
+                            <dd class="mt-1 text-gray-900"
+                                x-text="accommodationToView.destination ? accommodationToView.destination.name : '-'"></dd>
+                            <dt class="mt-3 font-medium text-gray-500">Total Kamar</dt>
+                            <dd class="mt-1 text-lg font-semibold text-indigo-600"
+                                x-text="(accommodationToView.rooms_count || '0') + ' Kamar'">
+                            </dd>
+                            <div class="flex items-center gap-4">
+                                <div>
+                                    <dt class="mt-3 font-medium text-gray-500">Status</dt>
+                                    <dd class="mt-1">
+                                        <span x-show="accommodationToView.status == 'publish'"
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Published</span>
+                                        <span x-show="accommodationToView.status == 'pending'"
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                        <span x-show="accommodationToView.status == 'rejected'"
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>
+                                        <span x-show="accommodationToView.status == 'draft'"
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Draft</span>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="mt-3 font-medium text-gray-500">Verifikasi</dt>
+                                    <dd class="mt-1">
+                                        <span x-show="accommodationToView.is_verified"
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Verified</span>
+                                        <span x-show="!accommodationToView.is_verified"
+                                            class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Not
+                                            Verified</span>
+                                    </dd>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <dt class="font-medium text-gray-500">Alamat</dt>
+                            <dd class="mt-1 text-gray-700" x-text="accommodationToView.address || '-'"></dd>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <dt class="font-medium text-gray-500">Deskripsi Akomodasi</dt>
+                            <dd class="mt-1 text-gray-700 whitespace-pre-wrap"
+                                x-text="accommodationToView.description || '-'"></dd>
+                        </div>
+                        <div class="sm:col-span-2 grid grid-cols-2 gap-x-6 pt-3 border-t">
+                            <div>
+                                <dt class="font-medium text-gray-500">Tanggal Dibuat</dt>
+                                <dd class="mt-1 text-gray-900" x-text="accommodationToView.created_at_formatted || '-'">
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-500">Diperbarui</dt>
+                                <dd class="mt-1 text-gray-900" x-text="accommodationToView.updated_at_formatted || '-'">
+                                </dd>
+                            </div>
+                        </div>
+                    </dl>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex justify-end rounded-b-2xl flex-shrink-0">
+                    <button @click="viewModalOpen = false" type="button"
+                        class="px-4 py-2 border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase bg-white hover:bg-gray-50">Tutup</button>
+                </div>
             </div>
         </div>
     </div>

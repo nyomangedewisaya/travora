@@ -15,7 +15,6 @@ return new class extends Migration
             $table->bigIncrements('id');
             $table->foreignId('partner_id')->constrained('users')->onDelete('cascade');
             $table->foreignId('destination_id')->constrained('destinations')->onDelete('cascade');
-            $table->foreignId('category_id')->constrained('categories')->onDelete('cascade');
             $table->string('name');
             $table->string('slug')->unique();
             $table->enum('type', ['hotel', 'villa', 'homestay',]);

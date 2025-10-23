@@ -17,10 +17,6 @@ class CategorySeeder extends Seeder
             'Kuliner Lokal',
             'Relaksasi & Pantai',
             'Wisata Sejarah',
-            'Hotel Bintang 5', 'Hotel Bintang 4', 'Hotel Bintang 3',
-            'Villa Pribadi', 'Villa Tepi Pantai',
-            'Homestay Budget', 'Homestay Keluarga',
-            'Glamping Unik', 'Resort Eksklusif', 'Penginapan Transit'
         ];
 
         foreach ($categories as $categoryName) {

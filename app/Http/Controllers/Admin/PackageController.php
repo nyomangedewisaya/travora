@@ -13,22 +13,63 @@ use Illuminate\Support\Str;
 
 class PackageController extends Controller
 {
+    private $validStatuses = ['pending', 'publish', 'draft', 'rejected'];
+
     public function index(Request $request)
     {
-        $packagesQuery = Package::with(['partner', 'destination', 'media'])->latest();
+        $packagesQuery = Package::with(['partner', 'destination.parent', 'category', 'media']); // Eager load relasi
 
         if ($request->filled('search')) {
             $packagesQuery->where('name', 'like', '%' . $request->search . '%');
         }
+
         if ($request->filled('filter_destination')) {
-            $packagesQuery->where('destination_id', $request->filter_destination);
+            $destination = Destination::where('slug', $request->filter_destination)->first();
+            if ($destination) {
+                $packagesQuery->where('destination_id', $destination->id);
+            }
         }
-        if ($request->filled('filter_status')) {
+
+        if ($request->filled('filter_category')) {
+            $category = Category::where('slug', $request->filter_category)->first();
+            if ($category) {
+                $packagesQuery->where('category_id', $category->id);
+            }
+        }
+
+        if ($request->filled('filter_status') && in_array($request->filter_status, $this->validStatuses)) {
             $packagesQuery->where('status', $request->filter_status);
         }
 
-        $packages = $packagesQuery->paginate(10);
-        $destinations = Destination::whereNotNull('parent_id')->orderBy('name')->get();
+        $sortBy = $request->input('sort_by', 'default');
+        $direction = $request->input('direction', 'desc');
+        if (!in_array($direction, ['asc', 'desc'])) {
+            $direction = 'desc';
+        }
+
+        switch ($sortBy) {
+            case 'name':
+                $packagesQuery->orderBy('name', $direction);
+                break;
+            case 'status':
+                $packagesQuery->orderBy('status', $direction);
+                break;
+            case 'price':
+                $packagesQuery->orderBy('price', $direction);
+                break;
+            default:
+                // Default = created_at desc (terbaru)
+                $packagesQuery->orderBy('created_at', $direction);
+                break;
+        }
+
+        // Pagination
+        $perPage = $request->input('perPage', 10);
+        if (!in_array($perPage, [10, 25, 50, 100])) {
+            $perPage = 10;
+        }
+        $packages = $packagesQuery->paginate($perPage);
+        $destinations = Destination::whereNotNull('parent_id')->orderBy('name')->get(); // Hanya anak
         $categories = Category::orderBy('name')->get();
         $partners = User::where('role', 'partner')->orderBy('name')->get();
 
@@ -37,6 +78,9 @@ class PackageController extends Controller
             'destinations' => $destinations,
             'categories' => $categories,
             'partners' => $partners,
+            'statuses' => $this->validStatuses, // Kirim status valid
+            'requestInput' => $request->all(), // Kirim semua input untuk retain value
+            'perPage' => $perPage,
         ]);
     }
 
@@ -51,10 +95,9 @@ class PackageController extends Controller
             'price' => 'required|numeric|min:0',
             'description' => 'required|string',
             'status' => 'required|in:pending,publish,draft,rejected',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048', // Nama input gambar
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
-        // Buat paket (tanpa gambar)
         $package = Package::create([
             'name' => $validated['name'],
             'slug' => Str::slug($validated['name']),
@@ -67,10 +110,9 @@ class PackageController extends Controller
             'status' => $validated['status'],
         ]);
 
-        // Simpan gambar ke tabel media jika ada
         if ($request->hasFile('image')) {
             $path = $request->file('image')->store('packages', 'public');
-            $package->media()->create([ // Gunakan relasi media()
+            $package->media()->create([
                 'file_path' => $path,
                 'type' => 'image',
             ]);
@@ -130,7 +172,7 @@ class PackageController extends Controller
             $existingMedia->delete();
         }
 
-        $package->delete(); // Hapus paketnya
+        $package->delete();
 
         return redirect()->route('admin.managements.packages.index')->with('success', 'Paket wisata berhasil dihapus!');
     }

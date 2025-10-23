@@ -2,13 +2,11 @@
     class="flex-shrink-0 bg-indigo-800 text-white w-64 flex-col transition-all duration-300 ease-in-out z-30 fixed inset-y-0 left-0 md:relative md:flex"
     :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
 >
-    {{-- Logo --}}
     <div class="h-20 flex items-center justify-center bg-indigo-800 flex-shrink-0">
         <img src="{{ asset('storage/travora-logo-white.jpeg') }}" alt="travora">
     </div>
 
     <nav class="mt-2 flex-grow overflow-y-auto">
-        {{-- DASHBOARD --}}
         <a href="{{ route('admin.dashboard') }}"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.dashboard') 
@@ -24,7 +22,6 @@
 
         <h3 class="mt-5 px-6 text-xs uppercase text-indigo-300 font-semibold tracking-wider">Manajemen</h3>
 
-        {{-- DESTINASI --}}
         <a href="{{ route('admin.managements.destinations.index') }}"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.managements.destinations.*') 
@@ -39,7 +36,6 @@
             <span class="mx-3">Destinasi</span>
         </a>
 
-        {{-- PAKET WISATA --}}
         <a href="{{ route('admin.managements.packages.index') }}"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.managements.packages.*') 
@@ -53,10 +49,9 @@
             <span class="mx-3">Paket Wisata</span>
         </a>
 
-        {{-- AKOMODASI --}}
         <a href="{{ route('admin.managements.accommodations.index') }}"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
-            {{ request()->routeIs('admin.managements.accommodations.*') 
+            {{ request()->routeIs('admin.managements.accommodations.index') 
                 ? 'bg-indigo-700 border-indigo-300 text-white' 
                 : 'border-transparent text-indigo-100 hover:bg-indigo-700 hover:text-white' }}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,7 +62,19 @@
             <span class="mx-3">Akomodasi</span>
         </a>
 
-        {{-- PESANAN --}}
+        <a href="{{ route('admin.managements.accommodations.rooms.index') }}"
+            class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
+            {{ request()->routeIs('admin.managements.accommodations.rooms.*') 
+                ? 'bg-indigo-700 border-indigo-300 text-white' 
+                : 'border-transparent text-indigo-100 hover:bg-indigo-700 hover:text-white' }}">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4">
+                </path>
+            </svg>
+            <span class="mx-3">Kamar Akomodasi</span>
+        </a>
+
         <a href="#"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.orders.*') 
@@ -82,7 +89,6 @@
 
         <h3 class="mt-5 px-6 text-xs uppercase text-indigo-300 font-semibold tracking-wider">Pengguna</h3>
 
-        {{-- PARTNER --}}
         <a href="#"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.partners.*') 
@@ -96,7 +102,6 @@
             <span class="mx-3">Partner</span>
         </a>
 
-        {{-- PELANGGAN --}}
         <a href="#"
             class="flex items-center mt-2 py-3 px-6 border-l-4 transition-all duration-200
             {{ request()->routeIs('admin.customers.*') 
@@ -111,7 +116,6 @@
         </a>
     </nav>
 
-    {{-- LOGOUT --}}
     <div class="px-6 py-4 bg-indigo-900">
         <form method="POST" action="{{ route('auth.logout') }}">
             @csrf
@@ -127,7 +131,6 @@
     </div>
 </aside>
 
-{{-- Overlay ketika sidebar terbuka di mobile --}}
 <div x-show="sidebarOpen" @click="sidebarOpen = false"
      class="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden" style="display: none;">
 </div>

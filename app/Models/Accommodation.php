@@ -22,10 +22,6 @@ class Accommodation extends Model
         return $this->belongsTo(Destination::class);
     }
 
-    public function category() {
-        return $this->belongsTo(Category::class);
-    }
-
     public function reviews() {
         return $this->morphMany(Review::class, 'reviewble');
     }

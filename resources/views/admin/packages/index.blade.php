@@ -13,13 +13,14 @@
         packageToDelete: {},
         imagePreviewUrl: null,
         errors: {},
-        filterSelectsInitialized: false,
         modalSelectInstances: {},
         filterSelectInstances: {},
         statusModalOpen: false,
         packageToUpdateStatus: {},
         statusFormAction: '',
         newStatus: '',
+        viewPackageModalOpen: false,
+        packageToView: {},
     
         initModalSelects() {
             Object.values(this.modalSelectInstances).forEach(select => select && select.destroy());
@@ -32,9 +33,14 @@
     
         initFilterSelects() {
             Object.values(this.filterSelectInstances).forEach(select => select && select.destroy());
-            try { this.filterSelectInstances.destination = new TomSelect('#filter_destination_select', { create: false, placeholder: 'Cari destinasi...' }); } catch (e) {}
-            try { this.filterSelectInstances.status = new TomSelect('#filter_status_select', { create: false, placeholder: 'Pilih status...' }); } catch (e) {}
-    
+            try {
+                const elFilterDest = document.getElementById('filter_destination_select');
+                if (elFilterDest) this.filterSelectInstances.destination = new TomSelect(elFilterDest, { create: false, placeholder: 'Cari destinasi...' });
+            } catch (e) {}
+            try {
+                const elFilterCat = document.getElementById('filter_category_select'); 
+                if (elFilterCat) this.filterSelectInstances.category = new TomSelect(elFilterCat, { create: false, placeholder: 'Cari kategori...' });
+            } catch (e) {}
             this.filterSelectsInitialized = true;
         },
     
@@ -91,6 +97,17 @@
             this.statusModalOpen = true;
         },
     
+        openViewPackageModal(packageData) {
+            this.packageToView = packageData; 
+            if (packageData.created_at) {
+                this.packageToView.created_at_formatted = new Date(packageData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+            if (packageData.updated_at) {
+                this.packageToView.updated_at_formatted = new Date(packageData.updated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+            this.viewPackageModalOpen = true;
+        },
+    
         previewImage(event) {
             const file = event.target.files[0];
             if (file) { this.imagePreviewUrl = URL.createObjectURL(file); } else if (this.isEditMode && this.formData.media && this.formData.media.length > 0) {
@@ -121,7 +138,6 @@
                 }
             }
     
-            // Validasi numerik tambahan (opsional tapi bagus)
             if (this.formData.duration_days && (isNaN(this.formData.duration_days) || this.formData.duration_days < 1)) {
                 this.errors.duration_days = 'Durasi harus berupa angka minimal 1.';
                 isValid = false;
@@ -135,75 +151,97 @@
         },
     
         handleSubmit() {
-            // 1. Ambil nilai TERBARU dari TomSelect SECARA MANUAL
             this.formData.partner_id = this.modalSelectInstances.partner ? this.modalSelectInstances.partner.getValue() : '';
             this.formData.destination_id = this.modalSelectInstances.destination ? this.modalSelectInstances.destination.getValue() : '';
             this.formData.category_id = this.modalSelectInstances.category ? this.modalSelectInstances.category.getValue() : '';
     
-            // 2. JALANKAN VALIDASI setelah formData diperbarui
             if (this.validate()) {
-                // 3. Tunggu sebentar agar nilai terupdate di DOM (jika perlu), lalu submit
                 this.$nextTick(() => {
                     this.$refs.form.submit();
                 });
             }
         }
     }" class="mt-8">
-        <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-semibold text-gray-700">Filter & Kelola Paket Wisata</h3>
-            <button @click="openCreateModal()"
-                class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 bg-indigo-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-indigo-700">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                </svg>
-                Tambah Paket
-            </button>
-        </div>
 
         <div class="bg-white p-4 rounded-2xl shadow-lg mb-6" x-init="initFilterSelects()">
             <form action="{{ route('admin.managements.packages.index') }}" method="GET">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <input type="text" name="search" placeholder="Cari nama paket wisata..."
-                        value="{{ request('search') }}"
-                        class="block w-full pl-4 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                    <div>
-                        {{-- Tampilkan placeholder sampai TomSelect siap --}}
-                        <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
-                        {{-- Sembunyikan select asli sampai TomSelect siap --}}
-                        <select name="filter_destination" id="filter_destination_select" x-show="filterSelectsInitialized"
-                            x-cloak>
-                            <option value="">Semua Destinasi</option>
-                            @foreach ($destinations as $destination)
-                                <option value="{{ $destination->id }}"
-                                    {{ request('filter_destination') == $destination->id ? 'selected' : '' }}>
-                                    {{ $destination->name }}</option>
-                            @endforeach
-                        </select>
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                    <div class="relative flex-grow w-full md:w-auto">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <input type="text" name="search" placeholder="Cari nama paket wisata..."
+                            value="{{ $requestInput['search'] ?? '' }}"
+                            class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-600">
                     </div>
-
-                    {{-- Select Status Filter (Dengan Placeholder) --}}
-                    <div>
-                        {{-- Tampilkan placeholder sampai TomSelect siap --}}
-                        <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
-                        <select name="filter_status" id="filter_status_select" x-show="filterSelectsInitialized" x-cloak>
-                            <option value="">Semua Status</option>
-                            <option value="publish" {{ request('filter_status') == 'publish' ? 'selected' : '' }}>Published
-                            </option>
-                            <option value="pending" {{ request('filter_status') == 'pending' ? 'selected' : '' }}>Pending
-                            </option>
-                            <option value="draft" {{ request('filter_status') == 'draft' ? 'selected' : '' }}>Draft
-                            </option>
-                            <option value="rejected" {{ request('filter_status') == 'rejected' ? 'selected' : '' }}>
-                                Rejected</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 w-full md:w-auto flex-shrink-0">
                         <button type="submit"
-                            class="w-full inline-flex justify-center py-2 px-4 border rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Filter</button>
+                            class="w-1/2 md:w-auto inline-flex justify-center py-2 px-5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Filter</button>
                         <a href="{{ route('admin.managements.packages.index') }}"
-                            class="w-full inline-flex justify-center py-2 px-4 border rounded-md text-gray-700 bg-white hover:bg-gray-50">Reset</a>
+                            class="w-1/2 md:w-auto inline-flex justify-center py-2 px-5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Reset</a>
                     </div>
                 </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-8 gap-4">
+                    <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
+                    <select name="filter_destination" id="filter_destination_select" x-show="filterSelectsInitialized" x-cloak
+                        class="col-span-2 md:col-span-3 shadow-md">
+                        <option value="">Semua Destinasi</option>
+                        @foreach ($destinations as $destination)
+                            <option value="{{ $destination->slug }}"
+                                {{ ($requestInput['filter_destination'] ?? '') == $destination->slug ? 'selected' : '' }}>
+                                {{ $destination->name }}
+                            </option>
+                        @endforeach
+                    </select>
+
+                    <div x-show="!filterSelectsInitialized" class="select-placeholder"></div>
+                    <select name="filter_category" id="filter_category_select" x-show="filterSelectsInitialized" x-cloak class="md:col-span-2 shadow-md">
+                        <option value="">Semua Kategori</option>
+                        @foreach ($categories as $category)
+                            <option value="{{ $category->slug }}"
+                                {{ ($requestInput['filter_category'] ?? '') == $category->slug ? 'selected' : '' }}>
+                                {{ $category->name }}
+                            </option>
+                        @endforeach
+                    </select>
+
+                    <select name="filter_status" id="filter_status_select"
+                        class="md:col-span-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-sm shadow-md focus:outline-none text-xs text-gray-600 appearance-none">
+                        <option value="">Semua Status</option>
+                        @foreach ($statuses as $status)
+                            <option value="{{ $status }}"
+                                {{ ($requestInput['filter_status'] ?? '') == $status ? 'selected' : '' }}>
+                                {{ ucfirst(str_replace('_', ' ', $status)) }}</option>
+                        @endforeach
+                    </select>
+
+                    <select name="sort_by"
+                        class="md:col-span-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-sm shadow-md focus:outline-none text-xs text-gray-600 appearance-none">
+                        <option value="default"
+                            {{ ($requestInput['sort_by'] ?? 'default') == 'default' ? 'selected' : '' }}>Urutkan (Default)
+                        </option>
+                        <option value="name" {{ ($requestInput['sort_by'] ?? '') == 'name' ? 'selected' : '' }}>Nama
+                            Paket</option>
+                        <option value="price" {{ ($requestInput['sort_by'] ?? '') == 'price' ? 'selected' : '' }}>Harga
+                        </option>
+                        <option value="status" {{ ($requestInput['sort_by'] ?? '') == 'status' ? 'selected' : '' }}>Status
+                        </option>
+                    </select>
+
+                    <select name="direction"
+                        class="md:col-span-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-sm shadow-md focus:outline-none text-xs text-gray-600 appearance-none">
+                        <option value="desc" {{ ($requestInput['direction'] ?? 'desc') == 'desc' ? 'selected' : '' }}>
+                            Menurun</option>
+                        <option value="asc" {{ ($requestInput['direction'] ?? '') == 'asc' ? 'selected' : '' }}>Menaik
+                        </option>
+                    </select>
+                </div>
+
+
             </form>
         </div>
 
@@ -279,13 +317,16 @@
                             </td>
                             <td class="px-6 py-4 text-center">
                                 <div class="flex justify-center items-center space-x-2">
-                                    <button @click="openEditModal({{ json_encode($package) }})"
-                                        class="text-indigo-600 hover:text-indigo-900 p-1" title="Edit"><svg
-                                            class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <button @click="openViewPackageModal({{ json_encode($package) }})"
+                                        class="text-blue-600 hover:text-blue-900 p-1" title="Lihat Detail">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z">
                                             </path>
-                                        </svg></button>
+                                        </svg>
+                                    </button>
                                     <button @click="openDeleteModal({{ json_encode($package) }})"
                                         class="text-red-600 hover:text-red-900 p-1" title="Hapus"><svg class="w-5 h-5"
                                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -304,8 +345,37 @@
                     @endforelse
                 </tbody>
             </table>
+            @if ($packages->isNotEmpty())
+                <div
+                    class="px-4 py-6 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <form action="{{ route('admin.managements.packages.index') }}" method="GET"
+                        class="flex items-center space-x-2">
+                        @foreach (request()->except(['perPage', 'page']) as $key => $value)
+                            @if (is_array($value))
+                                @foreach ($value as $item)
+                                    <input type="hidden" name="{{ $key }}[]" value="{{ $item }}">
+                                @endforeach
+                            @else
+                                <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                            @endif
+                        @endforeach
+
+                        <label for="perPage" class="text-sm font-medium text-gray-700 whitespace-nowrap">Tampil:</label>
+                        <select name="perPage" id="perPage" @change="$el.closest('form').submit()"
+                            class="appearance-none block w-20 py-1.5 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                            <option value="10" {{ $perPage == 10 ? 'selected' : '' }}>10</option>
+                            <option value="25" {{ $perPage == 25 ? 'selected' : '' }}>25</option>
+                            <option value="50" {{ $perPage == 50 ? 'selected' : '' }}>50</option>
+                            <option value="100" {{ $perPage == 100 ? 'selected' : '' }}>100</option>
+                        </select>
+                        <span class="text-sm text-gray-500">data</span>
+                    </form>
+                    <div>
+                        {{ $packages->appends(request()->query())->links() }}
+                    </div>
+                </div>
+            @endif
         </div>
-        <div class="mt-6">{{ $packages->appends(request()->query())->links() }}</div>
 
         <div x-show="modalOpen" x-cloak x-transition.opacity.duration.300ms
             class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -320,7 +390,6 @@
                     <template x-if="isEditMode"><input type="hidden" name="_method" value="PUT"></template>
 
                     <div class="p-6 space-y-6 overflow-y-auto">
-                        {{-- Nama Paket --}}
                         <div>
                             <label for="name" class="block text-sm font-medium text-gray-700">Nama Paket</label>
                             <input type="text" name="name" id="name" x-model="formData.name"
@@ -332,11 +401,10 @@
                             </p>
                         </div>
 
-                        {{-- Dropdown Partner --}}
                         <div>
                             <label for="partner_id" class="block text-sm font-medium text-gray-700">Milik Partner</label>
                             <select name="partner_id" id="partner_id">
-                                <option value="">Pilih Partner</option> {{-- <-- TAMBAHKAN INI --}}
+                                <option value="">Pilih Partner</option> 
                                 @foreach ($partners as $partner)
                                     <option value="{{ $partner->id }}">{{ $partner->name }}</option>
                                 @endforeach
@@ -345,13 +413,12 @@
                                 class="mt-1 text-sm text-red-600"></p>
                         </div>
 
-                        {{-- Dropdown Destinasi & Kategori --}}
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label for="destination_id" class="block text-sm font-medium text-gray-700">Tujuan
                                     Destinasi</label>
                                 <select name="destination_id" id="destination_id">
-                                    <option value="">Pilih Tempat Wisata</option> {{-- <-- TAMBAHKAN INI --}}
+                                    <option value="">Pilih Tempat Wisata</option> 
                                     @foreach ($destinations as $destination)
                                         <option value="{{ $destination->id }}">{{ $destination->name }}</option>
                                     @endforeach
@@ -361,14 +428,13 @@
                                 <label for="category_id" class="block text-sm font-medium text-gray-700">Kategori
                                     Paket</label>
                                 <select name="category_id" id="category_id">
-                                    <option value="">Pilih Kategori</option> {{-- <-- TAMBAHKAN INI --}}
+                                    <option value="">Pilih Kategori</option> 
                                     @foreach ($categories as $category)
                                         <option value="{{ $category->id }}">{{ $category->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
                         </div>
-                        {{-- Input Durasi & Harga --}}
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label for="duration_days" class="block text-sm font-medium text-gray-700">Durasi
@@ -388,7 +454,6 @@
                             </div>
                         </div>
 
-                        {{-- Deskripsi --}}
                         <div>
                             <label for="description" class="block text-sm font-medium text-gray-700">Deskripsi Paket &
                                 Itinerary</label>
@@ -397,7 +462,6 @@
                                 class="mt-1 block w-full bg-gray-50 px-4 py-2 border rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
                         </div>
 
-                        {{-- Status Paket --}}
                         <div>
                             <label for="status" class="block text-sm font-medium text-gray-700">Status Paket</label>
                             <select name="status" id="status" x-model="formData.status"
@@ -409,7 +473,6 @@
                             </select>
                         </div>
 
-                        {{-- Gambar --}}
                         <div>
                             <label for="image" class="block text-sm font-medium text-gray-700">Gambar Utama
                                 Paket</label>
@@ -420,7 +483,6 @@
                                 gambar.</p>
                         </div>
 
-                        {{-- Preview Gambar --}}
                         <div x-show="imagePreviewUrl" x-transition class="mt-4">
                             <p class="text-sm font-medium text-gray-500 mb-2">Preview:</p>
                             <img :src="imagePreviewUrl" class="w-full h-48 object-cover rounded-lg border shadow-sm">
@@ -503,7 +565,6 @@
                         <p class="text-sm text-gray-600 mt-1">Paket: <strong x-text="packageToUpdateStatus.name"></strong>
                         </p>
 
-                        {{-- 2. Daftar Pilihan Status Interaktif --}}
                         <div class="mt-4 space-y-2">
                             <button @click.prevent="newStatus = 'publish'" type="button"
                                 class="w-full flex items-center p-3 rounded-lg border transition-colors"
@@ -558,6 +619,104 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+        <div x-show="viewPackageModalOpen" x-cloak x-transition.opacity.duration.300ms
+            class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div @click.away="viewPackageModalOpen = false"
+                class="bg-white rounded-2xl shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div class="p-5 bg-blue-600 rounded-t-2xl">
+                    <div class="flex items-center">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-white/20 rounded-full">
+                                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </div>
+                            <h3 class="ml-4 text-xl font-semibold text-white">Detail Paket Wisata</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-6 space-y-4 overflow-y-auto">
+                    <img :src="packageToView.media && packageToView.media.length > 0 ?
+                        `{{ asset('storage') }}/${packageToView.media[0].file_path}` : 'https://placehold.co/600x300'"
+                        :alt="packageToView.name" class="w-full h-48 object-cover rounded-lg border shadow-sm mb-4">
+
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                        <div>
+                            <dt class="font-medium text-gray-500">Nama Paket</dt>
+                            <dd class="mt-1 font-semibold text-lg text-gray-900" x-text="packageToView.name || '-'"></dd>
+
+                            <dt class="mt-3 font-medium text-gray-500">Slug URL</dt>
+                            <dd class="mt-1 text-gray-700 font-mono text-xs bg-gray-100 px-2 py-1 rounded inline-block"
+                                x-text="packageToView.slug || '-'"></dd>
+
+                            <dt class="mt-3 font-medium text-gray-500">Partner Penyedia</dt>
+                            <dd class="mt-1 text-gray-900"
+                                x-text="packageToView.partner ? packageToView.partner.name : '-'"></dd>
+
+                            <dt class="mt-3 font-medium text-gray-500">Status</dt>
+                            <dd class="mt-1">
+                                <span x-show="packageToView.status == 'publish'"
+                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Published</span>
+                                <span x-show="packageToView.status == 'pending'"
+                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                <span x-show="packageToView.status == 'rejected'"
+                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>
+                                <span x-show="packageToView.status == 'draft'"
+                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Draft</span>
+                            </dd>
+
+                        </div>
+                        <div>
+                            <dt class="font-medium text-gray-500">Destinasi Tujuan</dt>
+                            <dd class="mt-1 text-gray-900"
+                                x-text="packageToView.destination ? packageToView.destination.name : '-'"></dd>
+
+                            <dt class="mt-3 font-medium text-gray-500">Durasi</dt>
+                            <dd class="mt-1 text-gray-900"><span x-text="packageToView.duration_days || '0'"></span> Hari
+                            </dd>
+
+                            <dt class="mt-3 font-medium text-gray-500">Harga</dt>
+                            <dd class="mt-1 text-lg font-semibold text-indigo-600">Rp <span
+                                    x-text="packageToView.price ? Number(packageToView.price).toLocaleString('id-ID') : '0'"></span>
+                            </dd>
+
+                            <dt class="mt-3 font-medium text-gray-500">Kategori</dt>
+                            <dd class="mt-1 text-gray-900"
+                                x-text="packageToView.category ? packageToView.category.name : '-'"></dd>
+                        </div>
+
+                        <div class="sm:col-span-2">
+                            <dt class="font-medium text-gray-500">Deskripsi & Itinerary</dt>
+                            <dd class="mt-1 text-gray-700 whitespace-pre-wrap" x-text="packageToView.description || '-'">
+                            </dd>
+                        </div>
+
+                        <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 pt-3 border-t">
+                            <div>
+                                <dt class="font-medium text-gray-500">Tanggal Dibuat</dt>
+                                <dd class="mt-1 text-gray-900" x-text="packageToView.created_at_formatted || '-'"></dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-500">Terakhir Diperbarui</dt>
+                                <dd class="mt-1 text-gray-900" x-text="packageToView.updated_at_formatted || '-'"></dd>
+                            </div>
+                        </div>
+                    </dl>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 flex justify-end rounded-b-2xl flex-shrink-0">
+                    <button @click="viewPackageModalOpen = false" type="button"
+                        class="px-4 py-2 border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase bg-white hover:bg-gray-50">
+                        Tutup
+                    </button>
+                </div>
             </div>
         </div>
     @endsection

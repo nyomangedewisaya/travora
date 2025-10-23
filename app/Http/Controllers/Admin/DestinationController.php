@@ -13,26 +13,70 @@ class DestinationController extends Controller
 {
     public function index(Request $request)
     {
-        $parentDestinations = Destination::whereNull('parent_id')->withCount('children')->latest()->get();
-        $childDestinationsQuery = Destination::whereNotNull('parent_id')->with('parent')->latest();
+        $parentDestinationsQuery = Destination::whereNull('parent_id')->withCount('children');
 
-        if ($request->filled('search')) {
-            $childDestinationsQuery->where('name', 'like', '%' . $request->search . '%');
+        if ($request->filled('parent_search')) {
+            $parentDestinationsQuery->where('name', 'like', '%' . $request->parent_search . '%');
+        }
+
+        $parentSort = $request->input('parent_sort', 'default');
+        $parentDirection = $request->input('parent_direction', 'desc');
+        if (!in_array($parentDirection, ['asc', 'desc'])) {
+            $parentDirection = 'desc';
+        }
+
+        switch ($parentSort) {
+            case 'name':
+                $parentDestinationsQuery->orderBy('name', $parentDirection);
+                break;
+            case 'children_count':
+                $parentDestinationsQuery->orderBy('children_count', $parentDirection);
+                break;
+            default:
+                $parentDestinationsQuery->orderBy('created_at', $parentDirection);
+                break;
+        }
+
+        $parentDestinations = $parentDestinationsQuery->get();
+        $childDestinationsQuery = Destination::whereNotNull('parent_id')->with('parent');
+
+        if ($request->filled('child_search')) {
+            $childDestinationsQuery->where('name', 'like', '%' . $request->child_search . '%');
         }
 
         if ($request->filled('filter_parent')) {
             $parent = Destination::where('slug', $request->filter_parent)->first();
-
             if ($parent) {
                 $childDestinationsQuery->where('parent_id', $parent->id);
             }
         }
 
-        $childDestinations = $childDestinationsQuery->paginate(10);
+        $childSort = $request->input('child_sort', 'default');
+        $childDirection = $request->input('child_direction', 'desc');
+        if (!in_array($childDirection, ['asc', 'desc'])) {
+            $childDirection = 'desc';
+        }
+
+        switch ($childSort) {
+            case 'name':
+                $childDestinationsQuery->orderBy('name', $childDirection);
+                break;
+            default:
+                $childDestinationsQuery->orderBy('created_at', $childDirection);
+                break;
+        }
+
+        $perPage = $request->input('perPage', 10);
+        if (!in_array($perPage, [10, 25, 50, 100])) {
+            $perPage = 10;
+        }
+        $childDestinations = $childDestinationsQuery->paginate($perPage);
 
         return view('admin.destinations.index', [
             'parentDestinations' => $parentDestinations,
             'childDestinations' => $childDestinations,
+            'requestInput' => $request->all(),
+            'perPage' => $perPage
         ]);
     }
 
@@ -132,7 +176,7 @@ class DestinationController extends Controller
     private function getCoordinatesFromAddress(string $address): array
     {
         $response = Http::withHeaders([
-            'User-Agent' => 'Travora/1.0 (sgpserver66@gmail.com)', 
+            'User-Agent' => 'Travora/1.0 (sgpserver66@gmail.com)',
         ])->get('https://nominatim.openstreetmap.org/search', [
             'q' => $address,
             'format' => 'json',
